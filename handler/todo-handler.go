@@ -27,8 +27,11 @@ func (handler TodoHandler) HandleGetAll(ctx echo.Context) error {
 
 func (handler TodoHandler) HandleCreate(ctx echo.Context) error {
 	var request model.TodoModel
-	request.Id = primitive.NewObjectID()
+	if request.Id == primitive.NilObjectID {
+		request.Id = primitive.NewObjectID()
+	}
 	_ = ctx.Bind(&request)
+
 	response := handler.repository.Create(request)
 	return ctx.JSON(201, response)
 }
