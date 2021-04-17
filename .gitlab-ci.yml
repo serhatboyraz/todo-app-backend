@@ -1,0 +1,64 @@
+cache:
+  paths:
+    - maven.repository/
+
+variables:
+  MAVEN_OPTS: "-Djava.awt.headless=true -Dmaven.repo.local=maven.repository/"
+  MAVEN_CLI_OPTS: "--batch-mode --errors --fail-at-end --show-version"
+
+stages:
+  - unit-test
+  - package
+  - docker-package
+  - deploy
+
+maven-unit-test:
+  only:
+    refs:
+      - master
+  image: maven:3-jdk-8
+  stage: unit-test
+  script:
+    - mvn $MAVEN_CLI_OPTS $MAVEN_OPTS clean test -Dpactbroker.host=$PACTFLOW_HOST -Dpactbroker.port=$PACTFLOW_PORT -Dpactbroker.auth.token=$PACTFLOW_TOKEN
+
+maven-package:
+  only:
+    refs:
+      - master
+  image: maven:3-jdk-8
+  stage: package
+  script:
+    - mvn $MAVEN_CLI_OPTS $MAVEN_OPTS install -DskipTests
+  artifacts:
+    paths:
+      - target/dependency
+
+build-prod-image:
+  only:
+    refs:
+      - master
+  image: docker:latest
+  stage: docker-package
+  services:
+    - name: docker:dind
+  before_script:
+    - docker login -u "$DOCKER_REGISTRY_USER" -p "$DOCKER_REGISTRY_PASSWORD" $DOCKER_REGISTRY_URL
+  after_script:
+    - docker logout
+  script:
+    - docker build -t $DOCKER_REGISTRY_URL/$DOCKER_REGISTRY_USER/todobackend:latest .
+    - docker tag $DOCKER_REGISTRY_URL/$DOCKER_REGISTRY_USER/todobackend:latest $DOCKER_REGISTRY_URL/$DOCKER_REGISTRY_USER/todobackend:stable
+    - docker push $DOCKER_REGISTRY_URL/$DOCKER_REGISTRY_USER/todobackend:latest
+    - docker push $DOCKER_REGISTRY_URL/$DOCKER_REGISTRY_USER/todobackend:stable
+
+deploy:
+  stage: deploy
+  image: dtzar/helm-kubectl
+  script:
+    - kubectl config set-cluster do-lon1-k8s-1-18-3-do-0-lon1-1594509414702 --server="$K8S_URL"
+    - kubectl config set clusters.do-lon1-k8s-1-18-3-do-0-lon1-1594509414702.certificate-authority-data "$K8S_CA_DATA"
+    - kubectl config set-credentials $K8S_CLUSTER_USER --token="$K8S_TOKEN"
+    - kubectl config set-context default --cluster=$K8S_CLUSTER_NAME --user=$K8S_CLUSTER_USER
+    - kubectl config use-context default
+    - kubectl config view
+    - kubectl apply -f deployment.yml

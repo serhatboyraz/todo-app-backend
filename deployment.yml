@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todobackend
+spec:
+  selector:
+    matchLabels:
+      app: todo-app-backend
+  replicas: 1
+  revisionHistoryLimit: 5
+  template:
+    metadata:
+      labels:
+        app: todo-app-backend
+    spec:
+      containers:
+        - name: todo-app-backend
+          image: serhatb/todo-app-backend:stable
+          ports:
+            - name: http
+              containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: todobackend-service
+spec:
+  selector:
+    app: todo-app-backend
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
